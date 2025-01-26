@@ -70,11 +70,9 @@ function pop_matrix = initialize_population(pop_size, E, V, C, source_edges)
                     % again from scratch
                     if pop_matrix(i, j) > C(j) 
                         pop_matrix(i,num_source_edges+1:num_edges) = zeros(1,num_edges-num_source_edges);
-                        disp('deleted edges');
                         break;
                     elseif j == num_edges
                         correct_edges = true;  
-                        disp('reached correct edges for sibling edges');
                         break;
                     end
                     
@@ -86,6 +84,166 @@ function pop_matrix = initialize_population(pop_size, E, V, C, source_edges)
                 
             end
         end
+    end
+end
+
+function fitness = evaluate_fitness(pop_matrix, t, a, C)
+    % Evaluate fitness for each solution in the population
+    fitness = sum(t + (a .* pop_matrix) ./ (1 - (pop_matrix ./ C)), 2);
+end
+
+function offspring = single_point_crossover(parent1, parent2)
+    crossover_point = randi([1, length(parent1)-1]);  % Random crossover point
+    offspring = [parent1(1:crossover_point), parent2(crossover_point+1:end)];
+end
+
+function pop_matrix = apply_mutation(pop_matrix, mutation_rate, C, source_edges, V)
+    mutation_value = rand*5;  % Small random change
+
+    edge_index = randi([1,4]);
+    disp(edge_index)
+    disp(max(0, min(pop_matrix(3, edge_index) + mutation_value, C(edge_index))))
+    pop_matrix(3, edge_index) = max(0, min(pop_matrix(3, edge_index) + mutation_value, C(edge_index)));
+    % pop_matrix(3, 2) = pop_matrix(3, 2) + mutation_value;
+end
+
+function pop_matrix = fix_population(pop_matrix, source_edges, V, C, E)
+    disp(pop_matrix(3,1:13))
+    num_source_edges = length(source_edges);
+
+    for i = 3:size(pop_matrix, 1)
+
+        % Fix source edge flows
+        total_flow = sum(pop_matrix(i, source_edges));
+        deficit = V - total_flow;
+        if deficit > 0
+              
+            for j=1:num_source_edges
+                [~, min_index] = min(pop_matrix(i, source_edges));
+                pop_matrix(i,min_index) = pop_matrix(i,min_index) + (deficit/num_source_edges);
+            end
+        end
+
+        if deficit < 0
+            
+            for j=1:num_source_edges
+                [~, max_index] = max(pop_matrix(i, source_edges));
+                pop_matrix(i,max_index) = pop_matrix(i,max_index) + (deficit/num_source_edges);
+            end
+        end
+
+        for j=num_source_edges+1:length(C)
+
+            parent_edges = find(E(:, j) == 1);
+            
+            sibling_edges = find(any(E(parent_edges, :) == 1, 1));
+            
+            flow_of_siblings = sum(pop_matrix(i, sibling_edges));
+
+            flow_of_parents = sum(pop_matrix(i, parent_edges));
+            % 
+            % disp('parentss')
+            % disp(parent_edges)
+            % disp('siblings')
+            % disp(sibling_edges)
+            % 
+            % 
+            % disp('flow of siblings')
+            % disp(flow_of_siblings)
+            % disp('flow of parents')
+            % disp(flow_of_parents)
+            
+            if ~ (flow_of_parents == flow_of_siblings)
+                % disp('Detected discrepancy')
+                deficit = flow_of_parents - flow_of_siblings;
+                num_siblings_edges = length(sibling_edges);
+
+                % disp('deficit')
+                % disp(deficit)
+
+                if deficit > 0
+                    for k=1:num_siblings_edges
+                        [~, min_index] = min(pop_matrix(i, sibling_edges));
+                        pop_matrix(i,min_index) = pop_matrix(i,min_index) + deficit/num_siblings_edges;
+                    end
+                end
+        
+                if deficit < 0
+                    for k=1:num_siblings_edges
+                        [~, max_index] = max(pop_matrix(i, sibling_edges));
+                                        disp(max_index)
+                        pop_matrix(i,max_index) = pop_matrix(i,max_index) + deficit/num_siblings_edges;
+                    end
+                end
+
+                
+
+            end
+
+        end
+        
+        % Ensure no edge exceeds capacity
+        pop_matrix(i, :) = min(pop_matrix(i, :), C);
+    end
+end
+
+function result = check_res(pop_matrix, C, V, source_edges, sink_edges, E)
+    result = true;
+    num_source_edges = length(source_edges);
+    num_sink_edges = length(sink_edges);
+
+    for i = 1:size(pop_matrix, 1)
+        source_sum = 0;
+        for j=1:num_source_edges
+            source_sum = source_sum + pop_matrix(i,j);
+        end
+        
+        if ~ (source_sum == V)
+            disp('Source sum is incorrect')
+            disp([num2str(i),num2str(source_sum)])
+            result = false;
+            return;
+        end
+        
+        sink_sum = 0;
+        for j=length(pop_matrix(i,:)) - num_sink_edges + 1:length(pop_matrix(i,:))
+            sink_sum = sink_sum + pop_matrix(i,j);
+        end
+
+        if ~ (sink_sum == V)
+            disp('Sink sum is incorrect')
+            disp([num2str(i),num2str(sink_sum)])
+            result = false;
+            return;
+        end
+
+        for j=1:length(pop_matrix(i,1))
+            if pop_matrix(i,j) < 0 || pop_matrix(i,j) > C(j)
+                result = false;
+                return;
+            end
+        end
+
+        num_edges = length(C);
+        disp(pop_matrix);
+        for j = num_source_edges+1:num_edges
+    
+            parent_edges = find(E(:, j) == 1);
+            
+            sibling_edges = find(any(E(parent_edges, :) == 1, 1));
+            
+            flow_of_siblings = sum(pop_matrix(i, sibling_edges));
+
+            flow_of_parents = sum(pop_matrix(i, parent_edges));
+            
+            if ~ (flow_of_siblings == flow_of_parents)
+                disp('Flow sum is incorrect')
+                disp(sibling_edges)
+                result = false;
+                return;
+            end
+        end
+
     end
 end
 
@@ -120,43 +278,61 @@ V = 100;
 t = 1;
 
 generations = 200;  % Number of generations
-pop_size = 1;
+pop_size = 3;
 mutation_rate = 0.1;  % Probability of mutation
 
 % Fitness function: minimize total travel time
 fitness_function = @(x) sum(t + (a .* x) ./ (1 - (x ./ C)), 2);
 
 pop_matrix = initialize_population(pop_size, E, V, C, source);
-disp('Sample population matrix (first 5 solutions):');
-disp(pop_matrix(1, :));
+% disp('Sample population matrix (first 5 solutions):');
+% disp(pop_matrix(1, :));
 
+
+
+
+best_fitness = inf;
+best_solution = [];
+
+for generation = 1:generations
+    % Evaluate fitness
+    fitness = evaluate_fitness(pop_matrix, t, a, C);
+
+    % Selection of the best two solutions
+    [~, idx] = sort(fitness);
+    parent1 = pop_matrix(idx(1), :);
+    parent2 = pop_matrix(idx(2), :);
+    
+    % Crossover to create new offspring
+    new_population = zeros(pop_size, size(pop_matrix, 2));
+    new_population(1, :) = parent1;  % Keep the best solution
+    new_population(2, :) = parent2;  % Keep the second best solution
+    
+    for i = 3:pop_size
+        new_population(i, :) = single_point_crossover(parent1, parent2);
+    end
+        disp(new_population(:, 1:13));
+    % Mutation
+    new_population = apply_mutation(new_population, mutation_rate, C, find(sum(E, 1)), V);
+    
+    
+    disp(new_population(:, 1:13));
+    % Fix population
+    new_population = fix_population(new_population, source, V, C, E);
+
+    disp(new_population);
+    disp(check_res(pop_matrix, C, V, source, sink, E))
+    break;
+    % Replace old population
+    pop_matrix = new_population;
+
+    % Store best solution
+
+end
 
 
 return;
 
-for gen = 1:generations
-    % Evaluate fitness
-    fitness = fitness_function(pop_matrix);
-
-    % Selection (elitism)
-    [sorted_fitness, idx] = sort(fitness);
-    pop_matrix = pop_matrix(idx(1:pop_size/2), :);
-
-    % Crossover (uniform crossover)
-    offspring = pop_matrix;
-    for i = 1:size(pop_matrix,1)/2
-        alpha = rand();
-        offspring(i,:) = alpha * pop_matrix(i,:) + (1-alpha) * pop_matrix(i+1,:);
-    end
-
-    % Mutation
-    mutation_idx = rand(size(offspring)) < mutation_rate;
-    offspring(mutation_idx) = offspring(mutation_idx) + randn * 0.05;
-
-    % Update population with offspring
-    pop_matrix = [pop_matrix; offspring];
-    pop_matrix = max(min(pop_matrix, C), 0);
-end
 
 % Display best solution
 best_solution = population(1,:);
