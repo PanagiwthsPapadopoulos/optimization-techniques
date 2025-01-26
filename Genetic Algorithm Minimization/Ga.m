@@ -1,47 +1,90 @@
 
-function pop_matrix = initialize_population(pop_size, E, V)
+function pop_matrix = initialize_population(pop_size, E, V, C, source_edges)
+    
     num_edges = size(E, 1);
     pop_matrix = zeros(pop_size, num_edges);  % Initialize matrix with zeros
+    num_source_edges = length(source_edges);
 
     for i = 1:pop_size
-        % Assign random values to source edges (no incoming edges)
-        source_edges = [1,2,3,4];
+  
+        correct_source_edges = false;
         
-        % Generate random values for source edges
-        random_values = randi([1, 100], 1, length(source_edges));
-        
-        % Scale values to ensure their sum equals V
-        normalized_values = round(random_values / sum(random_values) * V);
-        
-        % Assign to the population matrix
-        pop_matrix(i, source_edges) = normalized_values;
-        pop_matrix(i, length(source_edges)) = pop_matrix(i, 4) + (V - sum(pop_matrix(i, source_edges)));
+        while ~correct_source_edges
 
-        % Distribute the flow throughout the network
-        for j = length(source_edges)+1:num_edges
-            
-            % Parent edges are edges that a car is coming from
-            parent_edges = find(E(:, j) == 1);
+            % Assign values for all but one source edge
+            for j = 1:num_source_edges-1
+    
+                % Calculate flow for assigned edges
+                intake_flow_occupied = sum(pop_matrix(i, source_edges));
+    
+                % Calculate available flow for the rest of the edges
+                available_flow = V - intake_flow_occupied;
+             
+                % Assign cars to the edge with the maximum being the available
+                % flow or maximum allowed
+                upper_limit = min(available_flow, C(j));
+                pop_matrix(i, j) = rand * upper_limit;
+            end
+    
+            % Assign value to last edge
+            pop_matrix(i, length(source_edges)) = V - sum(pop_matrix(i, source_edges) );
 
-            % Sibling edges are edges that a car can choose to go instead
-            % of the edge j being checked
-            sibling_edges = find(any(E(parent_edges, :) == 1, 1));
-                
-            % Calculate the flow of the sibling edges
-            flow_of_siblings = sum(pop_matrix(i, sibling_edges));
-            
-            % Calculate the flow of the parent edges
-            flow_of_parents = sum(pop_matrix(i, parent_edges));
-            
-            % If this is the last sibling edge, equal the flow of the
-            % parents. Else, assign random value between 0 and the
-            % remaining flow of the intersection
-            if j == max(sibling_edges)
-                pop_matrix(i, j) = flow_of_parents - flow_of_siblings;
+            % Check if last edge is within acceptable range, else start
+            % again from scratch
+            if pop_matrix(i, length(source_edges)) <= C(num_source_edges)
+                correct_source_edges = true;
+                break;
             else
-                pop_matrix(i, j) = randi([0, flow_of_parents-flow_of_siblings]);
+                pop_matrix(i,:) = zeros(1,num_edges);
             end
             
+        end
+
+        correct_edges = false;
+
+        while ~correct_edges
+        
+            % Distribute the flow throughout the network
+            for j = num_source_edges+1:num_edges
+    
+                % Parent edges are edges that a car is coming from
+                parent_edges = find(E(:, j) == 1);
+    
+                % Sibling edges are edges that a car can choose to go instead
+                % of the edge j being checked
+                sibling_edges = find(any(E(parent_edges, :) == 1, 1));
+    
+                % Calculate the flow of the sibling edges
+                flow_of_siblings = sum(pop_matrix(i, sibling_edges));
+    
+                % Calculate the flow of the parent edges
+                flow_of_parents = sum(pop_matrix(i, parent_edges));
+    
+                % If this is the last sibling edge, equal the flow of the
+                % parents. Else, assign random value between 0 and the
+                % remaining flow of the intersection
+                if j == max(sibling_edges)
+                    pop_matrix(i, j) = flow_of_parents - flow_of_siblings;
+                    
+                    % Check if last edge is within acceptable range, else start
+                    % again from scratch
+                    if pop_matrix(i, j) > C(j) 
+                        pop_matrix(i,num_source_edges+1:num_edges) = zeros(1,num_edges-num_source_edges);
+                        disp('deleted edges');
+                        break;
+                    elseif j == num_edges
+                        correct_edges = true;  
+                        disp('reached correct edges for sibling edges');
+                        break;
+                    end
+                    
+                else
+                    upper_limit = min(flow_of_parents-flow_of_siblings, C(j));
+                    pop_matrix(i, j) = rand * upper_limit;
+                end
+
+                
+            end
         end
     end
 end
@@ -77,18 +120,19 @@ V = 100;
 t = 1;
 
 generations = 200;  % Number of generations
-pop_size = 100;
+pop_size = 1;
 mutation_rate = 0.1;  % Probability of mutation
 
 % Fitness function: minimize total travel time
 fitness_function = @(x) sum(t + (a .* x) ./ (1 - (x ./ C)), 2);
 
-pop_matrix = initialize_population(pop_size, E, V);
+pop_matrix = initialize_population(pop_size, E, V, C, source);
 disp('Sample population matrix (first 5 solutions):');
 disp(pop_matrix(1, :));
 
 
 
+return;
 
 for gen = 1:generations
     % Evaluate fitness
