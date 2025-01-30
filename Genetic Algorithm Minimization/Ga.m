@@ -98,13 +98,24 @@ function offspring = single_point_crossover(parent1, parent2)
 end
 
 function pop_matrix = apply_mutation(pop_matrix, mutation_rate, C, source_edges, V)
-    mutation_value = rand*15;  % Small random change
+    num_individuals = size(pop_matrix, 1);  % Number of solutions in population
+    num_edges = size(pop_matrix, 2);  % Number of edges
 
-    edge_index = randi([1,4]);  %what edge to mutate
-    % disp(edge_index)
-    % disp(max(0, min(pop_matrix(3, edge_index) + mutation_value, C(edge_index))))
-    pop_matrix(3, edge_index) = max(0, min(pop_matrix(3, edge_index) + mutation_value, C(edge_index)));
-    % pop_matrix(3, 2) = pop_matrix(3, 2) + mutation_value;
+    num_mutations = round(num_individuals * mutation_rate);  % Number of individuals to mutate
+
+    for i = 1:num_mutations
+        individual_idx = randi(num_individuals);  % Randomly select an individual to mutate
+        
+        % Select a random edge, ensuring it's NOT a source edge  
+        edge_index = randi([1,11]);
+
+        % Mutation value as a fraction of the edge capacity
+        mutation_value = (rand - 0.5) * 0.2 * C(edge_index);  % +/- 10% of capacity
+
+        % Apply mutation while respecting capacity limits
+        pop_matrix(individual_idx, edge_index) = max(0, ...
+            min(pop_matrix(individual_idx, edge_index) + mutation_value, C(edge_index)));
+    end
 end
 
 function pop_matrix = fix_population(pop_matrix, source_edges, V, C, E)
@@ -301,7 +312,7 @@ num_edges = 17;
 
 C = [54.13,21.56,34.08,49.19,33.03,21.84,29.96,24.87,47.24,33.97,26.89,32.76,39.98,37.12,53.83,61.65,59.73];
 a = [1.25,1.25,1.25,1.25,1.25,1.5,1.5,1.5,1.5,1.5,1,1,1,1,1,1,1];
-V = 100;
+V = 115;
 t = 1;
 
 generations = 500;  % Number of generations
@@ -320,6 +331,9 @@ pop_matrix = initialize_population(pop_size, E, V, C, source);
 
 best_fitness = inf;
 best_solution = [];
+
+best_fitness_per_gen = zeros(1, generations / 10);
+
 
 for generation = 1:generations
     % Evaluate fitness
@@ -356,24 +370,22 @@ for generation = 1:generations
     % Replace old population
     pop_matrix = new_population;
 
-    % Print best score every 10 generations
+    % Store and print best fitness every 10 generations
     if mod(generation, 10) == 0
-        best_fitness = min(fitness);  % Best fitness value in the population
+        best_fitness = min(fitness);
+        best_fitness_per_gen(generation / 10) = best_fitness;
         disp(['Generation ', num2str(generation), ': Best Fitness = ', num2str(best_fitness)]);
     end
 
 end
 
-
-return;
-
-
-% Display best solution
-best_solution = population(1,:);
-best_fitness = fitness_function(best_solution);
-disp('Optimal flow distribution:'), disp(best_solution);
-disp(['Minimum travel time:', num2str(best_fitness)]);
-
+% Plot best fitness per tenth generation
+figure;
+plot(10:10:generations, best_fitness_per_gen, '-o', 'LineWidth', 2, 'MarkerSize', 6);
+xlabel('Generation');
+ylabel('Best Fitness');
+title('Best Fitness Evolution Over Generations');
+grid on;
 
 
 
